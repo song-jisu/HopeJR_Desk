@@ -1,0 +1,236 @@
+[
+  {
+    "finger": "index",
+    "t": 1784803487.7,
+    "motors": {
+      "thumb_cmc": 96.86,
+      "thumb_mcp": 2.69,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "index_radial_flexor": 98.52,
+      "index_ulnar_flexor": 49.23,
+      "index_pip_dip": 3.04
+    }
+  },
+  {
+    "finger": "middle",
+    "t": 1784803537.1,
+    "motors": {
+      "thumb_cmc": 97.06,
+      "thumb_mcp": 2.69,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "middle_radial_flexor": 46.07,
+      "middle_ulnar_flexor": 43.24,
+      "middle_pip_dip": 1.02
+    }
+  },
+  {
+    "finger": "ring",
+    "t": 1784803662.9,
+    "motors": {
+      "thumb_cmc": 97.25,
+      "thumb_mcp": 23.85,
+      "thumb_pip": 32.06,
+      "thumb_dip": 39.21,
+      "ring_radial_flexor": 51.69,
+      "ring_ulnar_flexor": 99.64,
+      "ring_pip_dip": 1.59
+    }
+  },
+  {
+    "finger": "pinky",
+    "t": 1784803696.3,
+    "motors": {
+      "thumb_cmc": 97.06,
+      "thumb_mcp": 2.69,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "pinky_radial_flexor": 66.59,
+      "pinky_ulnar_flexor": 99.07,
+      "pinky_pip_dip": 98.84
+    }
+  },
+  {
+    "finger": "index",
+    "t": 1784803779.7,
+    "motors": {
+      "thumb_cmc": 79.61,
+      "thumb_mcp": 2.31,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "index_radial_flexor": 97.53,
+      "index_ulnar_flexor": 52.54,
+      "index_pip_dip": 3.04
+    }
+  },
+  {
+    "finger": "middle",
+    "t": 1784803922.9,
+    "motors": {
+      "thumb_cmc": 79.8,
+      "thumb_mcp": 2.69,
+      "thumb_pip": 0.0,
+      "thumb_dip": 31.28,
+      "middle_radial_flexor": 45.18,
+      "middle_ulnar_flexor": 50.75,
+      "middle_pip_dip": 0.82
+    }
+  },
+  {
+    "finger": "index",
+    "t": 1784804188.5,
+    "motors": {
+      "thumb_cmc": 60.0,
+      "thumb_mcp": 2.69,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "index_radial_flexor": 97.53,
+      "index_ulnar_flexor": 98.67,
+      "index_pip_dip": 4.13
+    }
+  },
+  {
+    "finger": "middle",
+    "t": 1784804239.4,
+    "motors": {
+      "thumb_cmc": 60.0,
+      "thumb_mcp": 30.0,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "middle_radial_flexor": 44.46,
+      "middle_ulnar_flexor": 97.9,
+      "middle_pip_dip": 1.02
+    }
+  },
+  {
+    "finger": "index",
+    "t": 1784804439.2,
+    "motors": {
+      "thumb_cmc": 40.0,
+      "thumb_mcp": 26.54,
+      "thumb_pip": 51.18,
+      "thumb_dip": 100.0,
+      "index_radial_flexor": 96.04,
+      "index_ulnar_flexor": 99.78,
+      "index_pip_dip": 3.04
+    }
+  },
+  {
+    "finger": "middle",
+    "t": 1784804466.9,
+    "motors": {
+      "thumb_cmc": 40.0,
+      "thumb_mcp": 26.54,
+      "thumb_pip": 51.32,
+      "thumb_dip": 39.21,
+      "middle_radial_flexor": 47.68,
+      "middle_ulnar_flexor": 98.5,
+      "middle_pip_dip": 1.02
+    }
+  },
+  {
+    "finger": "pinky",
+    "t": 1784804574.3,
+    "motors": {
+      "thumb_cmc": 40.2,
+      "thumb_mcp": 48.08,
+      "thumb_pip": 59.56,
+      "thumb_dip": 37.88,
+      "pinky_radial_flexor": 68.85,
+      "pinky_ulnar_flexor": 98.7,
+      "pinky_pip_dip": 99.01
+    }
+  },
+  {
+    "finger": "index",
+    "t": 1784804617.2,
+    "motors": {
+      "thumb_cmc": 20.2,
+      "thumb_mcp": 53.85,
+      "thumb_pip": 0.0,
+      "thumb_dip": 100.0,
+      "index_radial_flexor": 97.53,
+      "index_ulnar_flexor": 99.78,
+      "index_pip_dip": 3.04
+    }
+  },
+  {
+    "finger": "middle",
+    "t": 1784804643.8,
+    "motors": {
+      "thumb_cmc": 20.2,
+      "thumb_mcp": 53.85,
+      "thumb_pip": 48.97,
+      "thumb_dip": 100.0,
+      "middle_radial_flexor": 47.14,
+      "middle_ulnar_flexor": 98.8,
+      "middle_pip_dip": 1.02
+    }
+  },
+  {
+    "finger": "ring",
+    "t": 1784804674.5,
+    "motors": {
+      "thumb_cmc": 20.2,
+      "thumb_mcp": 78.85,
+      "thumb_pip": 48.38,
+      "thumb_dip": 100.0,
+      "ring_radial_flexor": 40.08,
+      "ring_ulnar_flexor": 99.82,
+      "ring_pip_dip": 1.19
+    }
+  },
+  {
+    "finger": "pinky",
+    "t": 1784804691.9,
+    "motors": {
+      "thumb_cmc": 20.2,
+      "thumb_mcp": 78.85,
+      "thumb_pip": 48.38,
+      "thumb_dip": 100.0,
+      "pinky_radial_flexor": 67.49,
+      "pinky_ulnar_flexor": 99.07,
+      "pinky_pip_dip": 98.67
+    }
+  },
+  {
+    "finger": "index",
+    "t": 1784804718.5,
+    "motors": {
+      "thumb_cmc": 0.78,
+      "thumb_mcp": 78.85,
+      "thumb_pip": 48.38,
+      "thumb_dip": 100.0,
+      "index_radial_flexor": 98.02,
+      "index_ulnar_flexor": 99.78,
+      "index_pip_dip": 20.43
+    }
+  },
+  {
+    "finger": "middle",
+    "t": 1784804756.8,
+    "motors": {
+      "thumb_cmc": 0.78,
+      "thumb_mcp": 78.85,
+      "thumb_pip": 48.53,
+      "thumb_dip": 100.0,
+      "middle_radial_flexor": 52.32,
+      "middle_ulnar_flexor": 40.24,
+      "middle_pip_dip": 15.95
+    }
+  },
+  {
+    "finger": "ring",
+    "t": 1784804792.6,
+    "motors": {
+      "thumb_cmc": 0.78,
+      "thumb_mcp": 78.85,
+      "thumb_pip": 58.09,
+      "thumb_dip": 100.0,
+      "ring_radial_flexor": 64.1,
+      "ring_ulnar_flexor": 99.82,
+      "ring_pip_dip": 1.39
+    }
+  }
+]

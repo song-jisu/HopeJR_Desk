@@ -1,0 +1,91 @@
+{
+  "pose": {
+    "thumb": {
+      "cmc": -172.0,
+      "mcp": 16.0,
+      "pip": 16.0,
+      "dip": 16.0
+    },
+    "index": {
+      "mcp_flex": 20.0,
+      "mcp_spread": 1.0,
+      "pip": 10.0
+    },
+    "middle": {
+      "mcp_flex": 30.0,
+      "mcp_spread": -5.0,
+      "pip": 10.0
+    },
+    "ring": {
+      "mcp_flex": 35.0,
+      "mcp_spread": 4.0,
+      "pip": 10.0
+    },
+    "pinky": {
+      "mcp_flex": 40.0,
+      "mcp_spread": 0.0,
+      "pip": 10.0
+    }
+  },
+  "raw_ref": {
+    "thumb_cmc": 684.2444444444445,
+    "thumb_mcp": 482.49264197530863,
+    "thumb_pip": -86.1925925925926,
+    "thumb_dip": 448.03950617283954,
+    "index_radial_flexor": 156.85185185185185,
+    "index_ulnar_flexor": 1132.0555555555557,
+    "index_pip_dip": 230.92294449176669,
+    "middle_radial_flexor": -238.5185185185185,
+    "middle_ulnar_flexor": 1063.1666666666667,
+    "middle_pip_dip": 343.1089444917667,
+    "ring_radial_flexor": -233.27777777777777,
+    "ring_ulnar_flexor": 1064.1666666666667,
+    "ring_pip_dip": 303.7849444917667,
+    "pinky_radial_flexor": -196.88888888888889,
+    "pinky_ulnar_flexor": 1261.6666666666667,
+    "pinky_pip_dip": 1100.9810555082333
+  },
+  "moment_arm": {
+    "thumb_mcp": 21.26,
+    "thumb_pip": 21.0,
+    "thumb_dip": 9.5,
+    "index_pip_dip": 6.3,
+    "middle_pip_dip": 5.0,
+    "ring_pip_dip": 5.5,
+    "pinky_pip_dip": 6.0,
+    "index_radial_flexor": 7.6
+  },
+  "mcp_flex_arm_radial": {
+    "index": 0.7890625,
+    "middle": 2.1875,
+    "ring": 2.89453125,
+    "pinky": 1.73046875
+  },
+  "mcp_flex_arm_ulnar": {
+    "index": 1.76953125,
+    "middle": 1.30078125,
+    "ring": 2.14453125,
+    "pinky": 2.09765625
+  },
+  "mcp_spread_gain": {
+    "index": -0.6,
+    "middle": -0.6,
+    "ring": -0.6,
+    "pinky": -0.6
+  },
+  "deadzone_frac": {
+    "thumb_mcp": 0.2,
+    "thumb_pip": 0.5,
+    "thumb_dip": 0.25
+  },
+  "flex_slack": {
+    "index_pip_dip": 0.4685390918517902,
+    "middle_pip_dip": 0.49807742590331616,
+    "ring_pip_dip": 0.512337311307501,
+    "pinky_pip_dip": 0.6152121988662638,
+    "thumb_mcp": 0.31906800388021334,
+    "thumb_pip": 2.086213871524472,
+    "thumb_dip": 0.34821363885004053
+  },
+  "pinch_pose": {}
+}

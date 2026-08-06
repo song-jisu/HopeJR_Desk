@@ -1,0 +1,23 @@
+{
+  "hand_hand": {
+    "mass": 3.0
+  },
+  "hand_base_link": {
+    "mass": 3.0
+  },
+  "shoulder_yaw_link": {
+    "mass": 3.0
+  },
+  "shoulder_roll_link": {
+    "mass": 3.0
+  },
+  "upper_elbow": {
+    "mass": 3.0
+  },
+  "lower_elbow": {
+    "mass": 3.0
+  },
+  "forearm": {
+    "mass": 3.0
+  }
+}
