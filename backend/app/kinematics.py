@@ -40,9 +40,27 @@ ARM_MOTORS = ["shoulder_pitch", "shoulder_yaw", "shoulder_roll", "elbow_flex",
 # frontend viewer (RobotViewer.jsx BASE_OFFSET_DEG / BASE_INVERT) so the pose the
 # backend reconstructs equals the real arm's pose. Keep the two in sync.
 BASE_OFFSET_DEG = {"shoulder_pitch": 0.0}
-BASE_INVERT = {"shoulder_pitch", "shoulder_yaw", "shoulder_roll"}
+# elbow_flex is here because the URDF turns it the wrong way round. Measured
+# against the encoder reference the joint was set up to (raw 2047 = 90 deg
+# between upper arm and forearm, 4096 counts/rev), the real elbow runs at
+# +0.659 deg per normalized unit -- folding as the value rises -- while the
+# unpatched URDF gave -0.502, straightening. Normalized -88 is a nearly
+# straight arm (13 deg), not the folded one the URDF reported.
+#
+# This only fixes the DIRECTION. The magnitudes still differ, because the URDF
+# joint range (136.7 deg) and the servo's calibrated span (131.8 deg) are not
+# the same number; that residual is small and has not been corrected here.
+BASE_INVERT = {"shoulder_pitch", "shoulder_yaw", "shoulder_roll", "elbow_flex"}
 
 G = np.array([0.0, 0.0, -9.81])   # world gravity, Z-up root frame
+
+# Arm servo encoder resolution. The normalized -100..100 span maps onto the
+# servo's calibrated [Min,Max]_Position_Limit window, so the ANGLE that span
+# covers is (max-min)/COUNTS_PER_REV of a turn -- a number the URDF does not
+# know. Measured, the two disagree: the elbow's calibrated window is 131.8 deg
+# while its URDF limits span 136.7, and other joints are further off. Feeding
+# the URDF span into motor_to_angle stretches every pose.
+COUNTS_PER_REV = 4096
 
 
 def _rpy_to_R(rpy) -> np.ndarray:
@@ -133,9 +151,31 @@ class ArmKinematics:
                 stack.append(j.child)
         return out
 
+    def set_calibration(self, cal: dict) -> None:
+        """Adopt the servos' own encoder windows as the angular scale.
+
+        `cal` is {motor: {range_min, range_max, ...}} as the backend reports it.
+        Without this the normalized span is stretched onto the URDF's joint
+        limits, which are not the same angle -- see COUNTS_PER_REV. Joints not
+        present, or with a degenerate window, keep the URDF behaviour.
+        """
+        spans: dict[str, float] = {}
+        for m in ARM_MOTORS:
+            c = cal.get(m) or {}
+            lo, hi = c.get("range_min"), c.get("range_max")
+            if lo is None or hi is None or hi <= lo:
+                continue
+            spans[m] = (hi - lo) / COUNTS_PER_REV * 2.0 * math.pi
+        self._span_rad = spans
+
     def motor_to_angle(self, motor: str, pos_norm: float) -> float | None:
         """Normalized motor position (-100..100) -> URDF joint angle (rad),
-        mirroring the frontend mapping (invert, limit-scaled, +base offset)."""
+        mirroring the frontend mapping (invert, scaled, +base offset).
+
+        The scale comes from the servo's encoder window when set_calibration has
+        supplied one, and from the URDF joint limits otherwise. The URDF limits
+        still fix WHERE the span sits; only its width is corrected.
+        """
         jn = self._joint_for(motor)
         if jn is None:
             return None
@@ -144,7 +184,11 @@ class ArmKinematics:
             return None
         p = -pos_norm if motor in BASE_INVERT else pos_norm
         p = max(-100.0, min(100.0, p))
-        a = j.lower + ((p + 100.0) / 200.0) * (j.upper - j.lower)
+        span = getattr(self, "_span_rad", {}).get(motor)
+        if span is None:
+            a = j.lower + ((p + 100.0) / 200.0) * (j.upper - j.lower)
+        else:
+            a = 0.5 * (j.lower + j.upper) + (p / 100.0) * (span / 2.0)
         return a + math.radians(BASE_OFFSET_DEG.get(motor, 0.0))
 
     def _fk(self, angles: dict[str, float]):

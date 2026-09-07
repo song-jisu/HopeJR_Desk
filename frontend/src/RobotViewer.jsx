@@ -48,7 +48,12 @@ const HAND_JOINTS = {
 // Baked-in mounting correction (URDF axis/zero vs the physical robot). ALWAYS
 // applied — the user never has to toggle these.
 const BASE_OFFSET_DEG = { shoulder_pitch: 0 }
-const BASE_INVERT = new Set(['shoulder_pitch', 'shoulder_yaw', 'shoulder_roll'])
+// elbow_flex: the URDF turns the elbow the wrong way round. Verified against the
+// encoder reference the joint was built to (raw 2047 = 90 deg between upper arm
+// and forearm): normalized -88 is a nearly straight arm, which the unpatched
+// URDF drew as fully folded. Keep this Set identical to BASE_INVERT in
+// backend/app/kinematics.py.
+const BASE_INVERT = new Set(['shoulder_pitch', 'shoulder_yaw', 'shoulder_roll', 'elbow_flex'])
 
 // User fine-tuning on TOP of the base correction (panel), starts clean.
 const DEFAULT_TUNING = Object.fromEntries(ARM.map(m => [m, { off: 0, inv: false }]))

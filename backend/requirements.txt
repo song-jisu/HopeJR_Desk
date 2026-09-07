@@ -2,5 +2,6 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
 websockets>=12.0
+numpy>=1.26
 # ROS2 (rclpy, std_msgs, sensor_msgs) comes from the system ROS2 install,
 # not pip. Only needed when HOPEJR_BACKEND=ros.

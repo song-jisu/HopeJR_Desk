@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .manager import init_manager, get_manager
 from .routers import (calibration, config, control, dashboard, hand,
-                      links, teaching, ws)
+                      identify, links, teaching, ws)
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(hand.router)
 app.include_router(config.router)
 app.include_router(calibration.router)
 app.include_router(teaching.router)
+app.include_router(identify.router)
 app.include_router(links.router)
 app.include_router(ws.router)
 

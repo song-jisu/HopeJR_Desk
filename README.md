@@ -34,6 +34,47 @@ from [`song-jisu`](https://github.com/song-jisu) into `ros2_ws/src`. Re-run it
 any time to update; a non-git package dir is backed up to `*.bak_<timestamp>`
 before cloning, so local edits are never silently lost.
 
+### Python environment (`.venv`)
+
+The backend needs FastAPI / uvicorn / pydantic / numpy. Create a virtualenv at
+the repo root — `.venv/` is already in `.gitignore`:
+
+```bash
+# with uv (recommended — works even without the python3-venv system package)
+uv venv .venv --python 3.12 --prompt .
+uv pip install --python .venv/bin/python -r backend/requirements.txt
+
+# ...or with stock venv (Debian/Ubuntu: sudo apt install python3.12-venv first)
+python3 -m venv .venv --prompt .
+.venv/bin/pip install -r backend/requirements.txt
+```
+
+`--prompt .` makes the shell show `(HopeJR_Desk)` instead of a useless `(.venv)`.
+
+Activate it with `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`),
+or just call `.venv/bin/python` directly. Smoke-test it:
+
+```bash
+cd backend && HOPEJR_BACKEND=mock ../.venv/bin/python -m uvicorn app.main:app --port 8000
+# -> http://localhost:8000/docs
+```
+
+> In mock mode `scripts/run_backend.sh` shells out to `uv run --with …`, so it uses its
+> own ephemeral env rather than this `.venv`. The command above is the way to run mock
+> mode *inside* `.venv`.
+
+This env covers **mock mode**, which is all you need for UI work. It is
+deliberately *not* enough for the real-robot paths:
+
+| Need | Not in `.venv` | Where it comes from |
+|---|---|---|
+| `serial` mode | `lerobot`, `scservo_sdk` | the existing lerobot env — see [serial mode](#real-robot--serial-mode-simplest-no-ros2) |
+| `ros` mode | `rclpy`, `std_msgs`, `sensor_msgs` | the system ROS2 install (not pip-installable) |
+| `scripts/` helpers | `opencv-python`, `scipy`, `pyrealsense2` | `pip install` them as needed |
+
+For ROS mode in one env, source ROS2 first and build the venv with system
+packages visible: `python3 -m venv --system-site-packages .venv`.
+
 ---
 
 ## Architecture
@@ -185,16 +226,75 @@ Open **http://localhost:5173**. API docs at **http://localhost:8000/docs**.
 > ⚠️ **Mock mode never touches hardware** — enabling servo and jogging only
 > moves simulated numbers. To move the real robot, use `serial` (or `ros`) mode.
 
+### Serial device names — `/dev/hopejr_arm` / `/dev/hopejr_hand`
+
+The two servo buses are addressed by these fixed names (defaults in
+[`backend/app/backends/serial_bus.py`](backend/app/backends/serial_bus.py);
+override with `HOPEJR_ARM_PORT` / `HOPEJR_HAND_PORT`):
+
+| Symlink | Servos | Model | Protocol |
+|---|---|---|---|
+| `/dev/hopejr_arm` | 7 | sm8512bl / sts3250 | 0 |
+| `/dev/hopejr_hand` | 16 | scs0009 | 1 |
+
+They are **udev symlinks**, so a bare `/dev/ttyUSB0` never has to be guessed and
+the two buses can't swap on reboot. Create them with the helper — plug in the
+adapters **one at a time** and run `detect` after each to see which tty is which:
+
+```bash
+bash scripts/hopejr_udev.sh detect                          # identify the adapters
+bash scripts/hopejr_udev.sh generate /dev/ttyUSB0 /dev/ttyUSB1   # preview the rule
+bash scripts/hopejr_udev.sh install  /dev/ttyUSB0 /dev/ttyUSB1   # write + reload (sudo)
+```
+(argument order is **arm first, hand second**). It writes
+`/etc/udev/rules.d/99-hopejr.rules`, reloads udev, and prints the resulting
+symlinks. Serial permission is a separate one-time step:
+
+```bash
+sudo usermod -aG dialout $USER   # then log out/in (or: newgrp dialout)
+```
+
+The rule pins each adapter by its **USB serial number** when it has one. Adapters
+without a serial number are indistinguishable to udev, so the rule falls back to
+the **USB port path** — those must always go back into the same physical port.
+(The CH340 `1a86:7523` boards ship without a serial number; the CH9102 `1a86:55d3`
+ones have one.)
+
+**Coexisting with the system's own rules.** Every rule that names a tty uses
+`SYMLINK+=` (append), never `SYMLINK=` (assign), so `/dev/hopejr_*` is added
+alongside the `/dev/serial/by-id/…` and `by-path` links rather than replacing
+them — an adapter already covered by other rules is fine.
+
+The one system service that *does* interfere is **ModemManager**: it treats any
+new serial port as a possible modem (`ID_MM_CANDIDATE=1`) and probes it with AT
+commands, which can garble the first servo connection. The generated rule sets
+`ENV{ID_MM_DEVICE_IGNORE}="1"` to exempt both buses. If a bus still misbehaves
+right after plug-in, confirm the exemption took:
+
+```bash
+udevadm info -q property -n /dev/hopejr_hand | grep ID_MM   # want ID_MM_DEVICE_IGNORE=1
+systemctl status ModemManager                               # or disable it outright
+```
+
+`brltty` (braille terminal support) is the other classic thief of CH340 ports.
+It is inactive on this machine; if a `/dev/ttyUSB*` vanishes seconds after being
+plugged in, that is the usual culprit — `sudo systemctl mask brltty`.
+
+Don't want udev at all? Skip it and pass the real paths instead; the stable
+`/dev/serial/by-id/...` names survive reboots on their own:
+
+```bash
+HOPEJR_ARM_PORT=/dev/serial/by-id/usb-...-if00 HOPEJR_HAND_PORT=/dev/ttyUSB1 ...
+```
+
 ### Real robot — `serial` mode (simplest, no ROS2)
 
 Runs on the machine physically wired to the servos (WSL, or a dedicated Linux
 box). Uses the **lerobot** environment (here, the `hopejr_right_arm/.venv`).
 
 ```bash
-# Two one-time prerequisites:
-#  (a) serial permission — devices are root:dialout 660, so add your user:
-sudo usermod -aG dialout $USER   # then log out/in (or: newgrp dialout)
-#  (b) an env with lerobot + fastapi/uvicorn/pydantic (the existing .venv has both)
+# Prerequisites: the symlinks + dialout membership above, plus an env with
+# lerobot + fastapi/uvicorn/pydantic (the existing lerobot .venv has both).
 
 # start the backend with that interpreter, pointing at your ports:
 cd backend
@@ -234,7 +334,8 @@ ros2 launch hopejr_right_arm_description view_robot.launch.py
 ```
 
 ### Requirements
-- Backend: Python 3.10+, FastAPI/uvicorn/pydantic (`backend/requirements.txt`), or `uv`.
+- Backend: Python 3.10+, FastAPI/uvicorn/pydantic/numpy (`backend/requirements.txt`),
+  or `uv` — see [Python environment (`.venv`)](#python-environment-venv).
   ROS mode additionally needs a working ROS2 (`rclpy`, `std_msgs`, `sensor_msgs`).
 - Frontend: Node 18+ / npm.
 

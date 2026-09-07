@@ -1,0 +1,610 @@
+{
+  "joint": "wrist_pitch",
+  "payload": "none",
+  "start": -95.0,
+  "end": 95.0,
+  "rate": 5.0,
+  "cycles": 2,
+  "settle": 1.0,
+  "name": "wrist_pitch_none",
+  "ts": 1788764864.9749184,
+  "samples": 3471,
+  "aborted": false,
+  "csv": "wrist_pitch_none.csv",
+  "columns": [
+    "t",
+    "cycle",
+    "leg",
+    "target",
+    "volt",
+    "shoulder_pitch_q",
+    "shoulder_pitch_cmd",
+    "shoulder_pitch_i",
+    "shoulder_pitch_cur",
+    "shoulder_pitch_qd",
+    "shoulder_pitch_temp",
+    "shoulder_yaw_q",
+    "shoulder_yaw_cmd",
+    "shoulder_yaw_i",
+    "shoulder_yaw_cur",
+    "shoulder_yaw_qd",
+    "shoulder_yaw_temp",
+    "shoulder_roll_q",
+    "shoulder_roll_cmd",
+    "shoulder_roll_i",
+    "shoulder_roll_cur",
+    "shoulder_roll_qd",
+    "shoulder_roll_temp",
+    "elbow_flex_q",
+    "elbow_flex_cmd",
+    "elbow_flex_i",
+    "elbow_flex_cur",
+    "elbow_flex_qd",
+    "elbow_flex_temp",
+    "wrist_roll_q",
+    "wrist_roll_cmd",
+    "wrist_roll_i",
+    "wrist_roll_cur",
+    "wrist_roll_qd",
+    "wrist_roll_temp",
+    "wrist_yaw_q",
+    "wrist_yaw_cmd",
+    "wrist_yaw_i",
+    "wrist_yaw_cur",
+    "wrist_yaw_qd",
+    "wrist_yaw_temp",
+    "wrist_pitch_q",
+    "wrist_pitch_cmd",
+    "wrist_pitch_i",
+    "wrist_pitch_cur",
+    "wrist_pitch_qd",
+    "wrist_pitch_temp"
+  ],
+  "telemetry_hz": 20.0,
+  "loop_hz": 36.1,
+  "models": {
+    "shoulder_pitch": "sm8512bl",
+    "shoulder_yaw": "sts3250",
+    "shoulder_roll": "sts3250",
+    "elbow_flex": "sts3250",
+    "wrist_roll": "sts3250",
+    "wrist_yaw": "sts3250",
+    "wrist_pitch": "sts3250"
+  },
+  "calibration": {
+    "shoulder_pitch": {
+      "range_min": 940,
+      "range_max": 3165,
+      "drive_mode": 0
+    },
+    "shoulder_yaw": {
+      "range_min": 1300,
+      "range_max": 2410,
+      "drive_mode": 0
+    },
+    "shoulder_roll": {
+      "range_min": 1344,
+      "range_max": 2750,
+      "drive_mode": 0
+    },
+    "elbow_flex": {
+      "range_min": 1080,
+      "range_max": 2580,
+      "drive_mode": 0
+    },
+    "wrist_roll": {
+      "range_min": 510,
+      "range_max": 3400,
+      "drive_mode": 0
+    },
+    "wrist_yaw": {
+      "range_min": 1840,
+      "range_max": 2250,
+      "drive_mode": 0
+    },
+    "wrist_pitch": {
+      "range_min": 1700,
+      "range_max": 2670,
+      "drive_mode": 0
+    },
+    "thumb_cmc": {
+      "range_min": 140,
+      "range_max": 700,
+      "drive_mode": 0
+    },
+    "thumb_mcp": {
+      "range_min": 590,
+      "range_max": 850,
+      "drive_mode": 0
+    },
+    "thumb_pip": {
+      "range_min": 20,
+      "range_max": 700,
+      "drive_mode": 0
+    },
+    "thumb_dip": {
+      "range_min": 173,
+      "range_max": 400,
+      "drive_mode": 0
+    },
+    "index_radial_flexor": {
+      "range_min": 198,
+      "range_max": 400,
+      "drive_mode": 0
+    },
+    "index_ulnar_flexor": {
+      "range_min": 570,
+      "range_max": 1023,
+      "drive_mode": 0
+    },
+    "index_pip_dip": {
+      "range_min": 464,
+      "range_max": 850,
+      "drive_mode": 0
+    },
+    "middle_radial_flexor": {
+      "range_min": 0,
+      "range_max": 560,
+      "drive_mode": 0
+    },
+    "middle_ulnar_flexor": {
+      "range_min": 650,
+      "range_max": 983,
+      "drive_mode": 0
+    },
+    "middle_pip_dip": {
+      "range_min": 457,
+      "range_max": 946,
+      "drive_mode": 0
+    },
+    "ring_radial_flexor": {
+      "range_min": 0,
+      "range_max": 741,
+      "drive_mode": 0
+    },
+    "ring_ulnar_flexor": {
+      "range_min": 261,
+      "range_max": 741,
+      "drive_mode": 0
+    },
+    "ring_pip_dip": {
+      "range_min": 420,
+      "range_max": 923,
+      "drive_mode": 0
+    },
+    "pinky_radial_flexor": {
+      "range_min": 0,
+      "range_max": 443,
+      "drive_mode": 0
+    },
+    "pinky_ulnar_flexor": {
+      "range_min": 486,
+      "range_max": 1023,
+      "drive_mode": 0
+    },
+    "pinky_pip_dip": {
+      "range_min": 364,
+      "range_max": 968,
+      "drive_mode": 0
+    }
+  },
+  "links": {
+    "base_link": {
+      "mass": 1.260139,
+      "com": [
+        -0.02,
+        0.0,
+        0.028
+      ]
+    },
+    "shoulder_yaw_link": {
+      "mass": 3.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "shoulder_roll_link": {
+      "mass": 3.0,
+      "com": [
+        -0.02,
+        0.0,
+        0.028
+      ]
+    },
+    "upper_elbow": {
+      "mass": 3.0,
+      "com": [
+        -0.02,
+        0.0,
+        0.028
+      ]
+    },
+    "lower_elbow": {
+      "mass": 3.0,
+      "com": [
+        -0.02,
+        0.0,
+        0.028
+      ]
+    },
+    "forearm": {
+      "mass": 3.0,
+      "com": [
+        -0.02,
+        0.0,
+        0.028
+      ]
+    },
+    "hand_base_link": {
+      "mass": 3.0,
+      "com": [
+        -0.02,
+        0.0,
+        0.028
+      ]
+    },
+    "hand_hand": {
+      "mass": 3.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_mcp_2": {
+      "mass": 0.008776,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_pip_1_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_pip_1": {
+      "mass": 0.007142,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_pip_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_pip_2": {
+      "mass": 0.006089,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_dip_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_thumb_dip": {
+      "mass": 0.005429,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_mcp_1": {
+      "mass": 0.004836,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_mcp_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_mcp_2": {
+      "mass": 0.001654,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_pip_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_pip": {
+      "mass": 0.005708,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_dip_1_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_dip_1": {
+      "mass": 0.005093,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_dip_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_index_dip_2": {
+      "mass": 0.005429,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_mcp_1": {
+      "mass": 0.004836,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_mcp_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_mcp_2": {
+      "mass": 0.001654,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_pip_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_pip": {
+      "mass": 0.005708,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_dip_1_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_dip_1": {
+      "mass": 0.005093,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_dip_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_middle_dip_2": {
+      "mass": 0.005429,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_mcp_1": {
+      "mass": 0.004836,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_mcp_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_mcp_2": {
+      "mass": 0.001654,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_pip_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_pip": {
+      "mass": 0.005708,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_dip_1_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_dip_1": {
+      "mass": 0.005093,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_dip_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_ring_dip_2": {
+      "mass": 0.005429,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_mcp_1": {
+      "mass": 0.004836,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_mcp_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_mcp_2": {
+      "mass": 0.001654,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_pip_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_pip": {
+      "mass": 0.005708,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_dip_1_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_dip_1": {
+      "mass": 0.005093,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_dip_2_support": {
+      "mass": 0.0,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_pinky_dip_2": {
+      "mass": 0.005429,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "hand_palm": {
+      "mass": 0.001,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "note": "i = SIGNED raw current/load counts; k_tau (counts->N*m) is not applied and must come from a known-mass differential run"
+}

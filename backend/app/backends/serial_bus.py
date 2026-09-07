@@ -15,6 +15,11 @@ Requires the environment where lerobot is installed (the hopejr_right_arm
 module is importable anywhere.
 
 Env: HOPEJR_ARM_PORT (default /dev/hopejr_arm), HOPEJR_HAND_PORT (/dev/hopejr_hand).
+
+Motion smoothing (SerialBackend.__init__ explains what each layer defends):
+    HOPEJR_ARM_RATE / HOPEJR_HAND_RATE     slew limit, normalized units/s (0 = off)
+    HOPEJR_ARM_ACCEL / HOPEJR_HAND_ACCEL   servo Acceleration reg, x100 steps/s^2
+    HOPEJR_ARM_SPEED / HOPEJR_HAND_SPEED   servo Goal_Velocity reg, steps/s
 """
 from __future__ import annotations
 
@@ -28,9 +33,53 @@ from ..models import MotorState, RobotStatus
 ARM_ORDER = [m.name for m in ARM_MOTORS]
 HAND_ORDER = [m.name for m in HAND_MOTORS]
 
-# scs0009 (hand) has no Present_Current register — use Present_Load as a proxy.
+# Two different readings stand in for joint torque, and they are not the same
+# quantity — both are recorded because each answers something the other cannot.
+#
+#   Present_Current  magnitude only. Measured on hardware, so it is the honest
+#                    "how hard is this motor working" number, but it carries no
+#                    direction: an sts3250 reports 0..N whether it is lifting or
+#                    lowering. Not implemented on every model (sm8512bl reads a
+#                    flat 0), and absent entirely on the scs0009 hand.
+#   Present_Load     SIGNED PWM duty, +-1000. Lower fidelity — it is the drive
+#                    command, not a measurement — but the sign is what separates
+#                    gravity from friction (friction flips with the direction of
+#                    travel, gravity does not), so identification needs it.
 HAND_CURRENT_REG = "Present_Load"
-ARM_CURRENT_REG = "Present_Current"
+ARM_CURRENT_REG = "Present_Current"     # magnitude, arm only
+ARM_LOAD_REG = "Present_Load"           # signed torque proxy, arm
+
+# Both registers are SIGN-MAGNITUDE, and lerobot does not decode either of them:
+# its per-model encoding table omits "Present_Current" for the STS/SMS series,
+# and the scs_series table is empty altogether. So both arrive raw, where a
+# reading in the negative direction looks like a large positive one (direction
+# bit set beside the magnitude) — abs() on that yields a garbage number, not a
+# magnitude.
+#
+# The sign is not cosmetic here. Friction opposes motion, so it flips sign with
+# the direction of travel while gravity does not; separating the two (see
+# identify.py) needs the direction, not just how hard the servo is pulling.
+#
+#     arm   Present_Current  bit 15   (Feetech SDK reads it as SCS_TOHOST(v, 15))
+#     hand  Present_Load     bit 10   (SCS load is magnitude 0..1000 + direction)
+#
+# The ARM's Present_Load is the exception: it IS in lerobot's STS/SMS table, so
+# lerobot has already decoded it by the time we see it. Decoding again would
+# corrupt it — hence sign_bit None below, meaning "already signed, leave it".
+ARM_CURRENT_SIGN_BIT = 15
+ARM_LOAD_SIGN_BIT = None      # lerobot decodes STS Present_Load for us
+HAND_CURRENT_SIGN_BIT = 10
+
+
+def _signed(value, sign_bit: int | None) -> float:
+    """Decode one sign-magnitude word. Negative = the servo is loaded/driving
+    toward decreasing position. `sign_bit` None means the value already carries
+    its sign (lerobot decoded it) and must be passed through untouched."""
+    v = int(value)
+    if sign_bit is None:
+        return float(v)
+    mag = v & ((1 << sign_bit) - 1)
+    return float(-mag if (v >> sign_bit) & 1 else mag)
 
 
 
@@ -168,6 +217,47 @@ class _Bus:
         except Exception:
             pass
 
+    # Onboard motion profile. Both control tables carry these at the same
+    # addresses — STS/SMS for the arm, SCS for the hand:
+    #     Acceleration  (41, 1 byte)   units of 100 steps/s^2
+    #     Goal_Velocity (46, 2 bytes)  steps/s
+    # Left at the factory default of 0 a servo reads both as "no limit" and
+    # answers a Goal_Position jump at full speed and full torque. Writing them
+    # makes the servo generate its own trapezoidal profile.
+    PROFILE_REGS = ("Acceleration", "Goal_Velocity")
+
+    def read_profile(self) -> dict:
+        """Current {reg: {motor: value}}. Logged before we overwrite, so what
+        the servos were actually set to is visible rather than assumed."""
+        return {r: self.read_all(r, normalize=False) for r in self.PROFILE_REGS}
+
+    def write_profile(self, accel: int, speed: int) -> dict:
+        """Install the onboard profile on every motor of this bus.
+
+        Both are SRAM registers, so they reset when a servo loses power — this
+        runs on each torque enable rather than once at startup. A value <= 0
+        leaves that register alone. Returns {reg: motors_written}."""
+        self._select()
+        wrote: dict[str, int] = {}
+        for reg, val in (("Acceleration", accel), ("Goal_Velocity", speed)):
+            if not val or val <= 0:
+                continue
+            values = {n: int(val) for n in self.order}
+            try:
+                self.bus.sync_write(reg, values, normalize=False)
+                wrote[reg] = len(values)
+            except Exception:
+                # One deaf servo must not cost the whole bus its profile.
+                ok = 0
+                for n in self.order:
+                    try:
+                        self.bus.write(reg, n, int(val), normalize=False)
+                        ok += 1
+                    except Exception:
+                        pass
+                wrote[reg] = ok
+        return wrote
+
     def write_goals(self, goals: dict):
         # sync_write works on both protocols (proto 1 hand included).
         self._select()
@@ -209,10 +299,20 @@ class SerialBackend:
 
     def __init__(self) -> None:
         self._cmd = {m.name: m.home for m in ARM_MOTORS + HAND_MOTORS}
+        # _cmd is where the UI wants the joint; _out is how far the slew limiter
+        # has let the goal actually travel (see _worker). They differ only while
+        # a commanded move is still ramping.
+        self._out = dict(self._cmd)
         self._pos = dict(self._cmd)
-        self._cur = {k: 0.0 for k in self._cmd}
+        self._cur = {k: 0.0 for k in self._cmd}    # magnitude (see ARM_CURRENT_REG)
+        self._load = {k: 0.0 for k in self._cmd}   # SIGNED torque proxy
         self._temp = {k: 0.0 for k in self._cmd}
         self._vel = {k: 0.0 for k in self._cmd}
+        # When each motor's position was last read. Velocity needs a per-motor
+        # dt, not one global one: the hand is read half per cycle (protocol 1
+        # has no sync read), so its samples are two cycles apart while the
+        # arm's are one, and a shared dt would report the hand at double speed.
+        self._pos_t: dict[str, float] = {}
         self._volt = {k: 0.0 for k in self._cmd}
         self._servo_enabled = False
         self._estop = False
@@ -259,6 +359,36 @@ class SerialBackend:
         # percent — kills the hunting buzz from jittery camera commands.
         self.hand_deadband = float(os.environ.get("HOPEJR_HAND_DEADBAND", "1.5"))
         self._sent: dict[str, float] = {}
+
+        # --- motion smoothing ------------------------------------------------
+        # Two layers, both defending against the same thing: a slider drag moves
+        # the goal instantly, and a position servo answers an instant jump with
+        # full speed and full torque (current spike, gear shock, overload trip).
+        #
+        #   1. onboard profile — the servo ramps its own moves. Hardware
+        #      backstop: it still applies to Home, to estop recovery, and to
+        #      anything that bypasses the limiter (rate 0).
+        #   2. slew limiter — the worker walks the commanded value toward the UI
+        #      target at a bounded rate, so the goal a servo ever sees is
+        #      already reachable. Normally this is the layer that governs; the
+        #      profile only bites when a goal moves faster than the limiter.
+        #
+        # Profile units are servo counts (accel x100 steps/s^2, speed steps/s);
+        # the arm is 4096 counts/rev, the hand 1024 counts over 300 degrees.
+        self.arm_accel = int(os.environ.get("HOPEJR_ARM_ACCEL", "10"))
+        self.arm_speed = int(os.environ.get("HOPEJR_ARM_SPEED", "1500"))
+        self.hand_accel = int(os.environ.get("HOPEJR_HAND_ACCEL", "10"))
+        self.hand_speed = int(os.environ.get("HOPEJR_HAND_SPEED", "500"))
+        # Slew rates are normalized units per second (arm spans -100..100, hand
+        # 0..100). 60 = a full arm sweep in ~3.3 s. The hand follows camera
+        # tracking so it may be quicker: 200 = fully open to closed in 0.5 s.
+        # 0 disables the limiter for that bus and leaves only the profile.
+        self.arm_rate = float(os.environ.get("HOPEJR_ARM_RATE", "60"))
+        self.hand_rate = float(os.environ.get("HOPEJR_HAND_RATE", "200"))
+        # Kept so a temporary override (the identification sweep runs the arm
+        # far slower than jogging) always has a known value to restore to,
+        # even if the run that set it died without cleaning up.
+        self._rate_default = {"arm": self.arm_rate, "hand": self.hand_rate}
 
     def _load_drive_modes(self) -> dict:
         """Per-motor direction flips from the arm calibration file. A Feetech
@@ -370,6 +500,29 @@ class SerialBackend:
                     else:
                         self._hand_on = want
 
+                # SLEW LIMIT: advance _out toward the UI target _cmd by at most
+                # rate*dt. Sending _cmd straight through means a slider drag
+                # hands the servo an instant jump, which it chases at full speed
+                # and full torque; ramping the goal instead keeps every target
+                # the servo sees within reach of the previous one.
+                #
+                # dt is clamped: a stalled serial cycle (a timeout blocks the
+                # whole loop) would otherwise budget one huge step and defeat
+                # the limit exactly when things are already going wrong.
+                if not self._estop and not self._calib_active:
+                    dts = min(max(dt_, 1e-3), 0.2)
+                    with self._lock:
+                        for order_, rate in ((ARM_ORDER, self.arm_rate),
+                                             (HAND_ORDER, self.hand_rate)):
+                            if rate <= 0:
+                                for n_ in order_:
+                                    self._out[n_] = self._cmd[n_]
+                                continue
+                            step = rate * dts
+                            for n_ in order_:
+                                d = self._cmd[n_] - self._out[n_]
+                                self._out[n_] += max(-step, min(step, d))
+
                 # write goals to whichever bus has torque (arm only if opted in).
                 # A limp bus is skipped entirely — e.g. during teaching the arm is
                 # backdriven and only read, while the hand keeps tracking goals.
@@ -382,15 +535,24 @@ class SerialBackend:
                 if not self._estop and not self._calib_active:
                     if self._hand and self._hand_on:
                         with self._lock:
-                            hand_goals = {n_: self._cmd[n_] for n_ in HAND_ORDER
-                                          if abs(self._cmd[n_] - self._sent.get(n_, -1e9))
-                                          >= self.hand_deadband}
+                            hand_goals = {}
+                            for n_ in HAND_ORDER:
+                                o = self._out[n_]
+                                sent = self._sent.get(n_)
+                                if sent is None or abs(o - sent) >= self.hand_deadband:
+                                    hand_goals[n_] = o
+                                elif o != sent and o == self._cmd[n_]:
+                                    # The ramp has arrived but its last steps were
+                                    # each under the deadband. Flush the remainder
+                                    # once so a slewed move doesn't stop short of
+                                    # the target it was given.
+                                    hand_goals[n_] = o
                         if hand_goals:
                             self._hand.write_goals(hand_goals)
                             self._sent.update(hand_goals)
                     if self._arm and self._arm_on and self.drive_arm:
                         with self._lock:
-                            arm_goals = {n_: self._cmd[n_] for n_ in ARM_ORDER}
+                            arm_goals = {n_: self._out[n_] for n_ in ARM_ORDER}
                         self._arm.write_goals(arm_goals)
 
                 # read present position every cycle (serial IO outside the lock).
@@ -409,9 +571,23 @@ class SerialBackend:
                         half = HAND_ORDER[n % 2::2]
                         hp = self._hand.read_some("Present_Position", half, normalize=True)
                     with self._lock:
+                        t_read = time.time()
+                        # Differentiate position for velocity. The reading is
+                        # quantized to encoder counts, so a bare difference at
+                        # 50 Hz is mostly quantization noise — smooth it. Sign
+                        # is what the identification sweep needs (which way the
+                        # joint is travelling), so this stays signed.
+                        for k, v in {**ap, **hp}.items():
+                            t_was = self._pos_t.get(k)
+                            if t_was is not None:
+                                d = t_read - t_was
+                                if 0 < d < 1.0:
+                                    inst = (v - self._pos.get(k, v)) / d
+                                    self._vel[k] = 0.7 * self._vel.get(k, 0.0) + 0.3 * inst
+                            self._pos_t[k] = t_read
                         self._pos.update(ap)
                         self._pos.update(hp)
-                        self._last_read = time.time()
+                        self._last_read = t_read
 
                 # calibration: on start, center the arm pose (half-turn homing) so
                 # ranges don't cross the encoder wrap — done here in the worker
@@ -459,12 +635,34 @@ class SerialBackend:
                 bus.write_raw("Goal_Position", raw)
         except Exception as e:
             self._error = f"hold-pose {bus.name}: {e}"
-        # start UI commands from the current pose too, for this bus's motors
+        # start UI commands from the current pose too, for this bus's motors.
+        # _out must follow _cmd here or the slew limiter would ramp away from a
+        # stale value — the pose the bus was last commanded to, not the pose it
+        # is actually in — which is the jerk the raw hold above just prevented.
         order = ARM_ORDER if bus is self._arm else HAND_ORDER
         with self._lock:
             for k in order:
                 if k in self._pos:
                     self._cmd[k] = self._pos[k]
+                self._out[k] = self._cmd[k]
+        # Install the onboard trapezoidal profile before torque comes on. These
+        # are SRAM registers that a servo loses with power, so this belongs on
+        # every enable, not once at startup.
+        arm = bus is self._arm
+        accel = self.arm_accel if arm else self.hand_accel
+        speed = self.arm_speed if arm else self.hand_speed
+        try:
+            before = bus.read_profile()
+            wrote = bus.write_profile(accel, speed)
+            def _span(reg):
+                v = [x for x in before.get(reg, {}).values() if x is not None]
+                return f"{min(v)}..{max(v)}" if v else "?"
+            print(f"[serial] {bus.name} profile accel={_span('Acceleration')}->{accel} "
+                  f"speed={_span('Goal_Velocity')}->{speed} wrote={wrote}", flush=True)
+        except Exception as e:
+            # A servo without these registers is not a reason to refuse torque;
+            # the software slew limiter still applies.
+            self._error = f"profile {bus.name}: {e}"
         try:
             bus.enable()
         except Exception as e:
@@ -478,14 +676,25 @@ class SerialBackend:
             except Exception:
                 return {}
         ac = safe(self._arm, ARM_CURRENT_REG)
+        al = safe(self._arm, ARM_LOAD_REG)
         hc = safe(self._hand, HAND_CURRENT_REG)
         at = safe(self._arm, "Present_Temperature")
         ht = safe(self._hand, "Present_Temperature")
         av = safe(self._arm, "Present_Voltage")
         hv = safe(self._hand, "Present_Voltage")
         with self._lock:
-            for k, v in {**ac, **hc}.items():
-                self._cur[k] = float(abs(v))         # raw counts (scale varies by model)
+            # Magnitude feeds the UI and contact detection (unchanged); the
+            # signed load feeds identification. The arm has two distinct
+            # registers for these, the hand only one — so on the hand the two
+            # are the same reading, once as magnitude and once with its sign.
+            for k, v in ac.items():
+                self._cur[k] = abs(_signed(v, ARM_CURRENT_SIGN_BIT))
+            for k, v in al.items():
+                self._load[k] = _signed(v, ARM_LOAD_SIGN_BIT)
+            for k, v in hc.items():
+                sv = _signed(v, HAND_CURRENT_SIGN_BIT)
+                self._cur[k] = abs(sv)
+                self._load[k] = sv
             for k, v in {**at, **ht}.items():
                 self._temp[k] = float(v)             # already deg C
             for k, v in {**av, **hv}.items():
@@ -505,6 +714,8 @@ class SerialBackend:
                     command=round(self._cmd.get(name, 0.0), 3),
                     velocity=round(self._vel.get(name, 0.0), 3),
                     current=round(self._cur.get(name, 0.0), 1),
+                    current_signed=round(self._load.get(name, 0.0), 1),
+                    goal=round(self._out.get(name, 0.0), 3),
                     temperature=round(self._temp.get(name, 0.0), 1),
                     voltage=round(self._volt.get(name, 0.0), 1),
                     error=False,
@@ -533,6 +744,23 @@ class SerialBackend:
             raise KeyError(name)
         with self._lock:
             self._cmd[name] = clamp(spec, position)
+
+    def get_slew_rate(self, unit: str) -> float:
+        return self.arm_rate if unit == "arm" else self.hand_rate
+
+    def set_slew_rate(self, unit: str, rate: float | None) -> float:
+        """Override one bus's slew limit; `rate` None restores the configured
+        default. Returns the rate now in force.
+
+        The identification sweep uses this: it needs a known, deliberately slow
+        constant velocity, which is the opposite of what jogging wants.
+        """
+        r = self._rate_default[unit] if rate is None else max(0.0, float(rate))
+        if unit == "arm":
+            self.arm_rate = r
+        else:
+            self.hand_rate = r
+        return r
 
     def set_servo_enabled(self, enabled: bool, unit: str | None = None) -> None:
         """`unit` None = both buses. Per-unit exists for teaching: the arm goes

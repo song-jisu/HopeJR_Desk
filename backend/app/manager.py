@@ -17,6 +17,7 @@ from typing import Optional
 from .backends.base import RobotBackend
 from .backends.mock import MockBackend
 from .hand_kinematics import HandKinematics
+from .identify import SweepRunner
 from .hardware import (ALL_MOTORS, FINGER_BY_INDEX, FINGERS, HAND_MOTORS,
                        MOTOR_BY_NAME, MotorSpec, clamp, remap_value)
 from .models import (ActionResult, FingerState, MotorState, RobotStatus,
@@ -61,6 +62,11 @@ class RobotManager:
 
         # hand tendon kinematics (motor value -> finger joint angles)
         self.hand_kin = HandKinematics()
+
+        # identification sweeps (gravity/friction parameter ID). Sampled from
+        # this loop's snapshots, so it needs the rate they arrive at.
+        self.telemetry_hz = TELEMETRY_HZ
+        self.ident = SweepRunner(self)
 
         self.logs: collections.deque = collections.deque(maxlen=LOG_CAPACITY)
         self.log("info", f"RobotManager created (backend={mode})")
@@ -189,6 +195,16 @@ class RobotManager:
         return out
 
     # --- gravity torque (backend FK, PLAN §8) --------------------------------
+    def _arm_kin_calibrated(self):
+        """ArmKinematics with the servos' encoder windows installed as the
+        angular scale (see kinematics.set_calibration). Refreshed on the same
+        ~1 Hz tick as the link cache, since a re-calibration changes it."""
+        from .kinematics import get_kinematics
+        kin = get_kinematics()
+        if kin is not None:
+            kin.set_calibration(self._calibration_snapshot())
+        return kin
+
     def _gravity_torque(self, motors: list[MotorState], now: float) -> dict:
         """Per-arm-joint gravity load torque from live pose + link masses.
         Masses are cached and refreshed ~1 Hz (link_params.json is tiny but the
@@ -199,6 +215,7 @@ class RobotManager:
                 from . import links as linklib
                 self._links_cache = linklib.get_links()
                 self._links_cache_t = now
+                self._arm_kin_calibrated()   # refresh the angular scale too
             kin = kinematics.get_kinematics()
             if kin is None:
                 return {}
@@ -550,6 +567,19 @@ class RobotManager:
 
         self._replay_task = asyncio.create_task(_run())
         return ActionResult(ok=True, message=f"replaying {name}")
+
+    # --- identification (gravity / friction parameter ID) --------------------
+    def identify_supported(self) -> bool:
+        return self.ident.supported()
+
+    def begin_sweep(self, req) -> ActionResult:
+        return self.ident.start(req)
+
+    def stop_sweep(self) -> ActionResult:
+        return self.ident.stop()
+
+    def sweep_status(self) -> dict:
+        return self.ident.status()
 
     # --- logs (PLAN §11) -----------------------------------------------------
     def log(self, level: str, message: str) -> None:
