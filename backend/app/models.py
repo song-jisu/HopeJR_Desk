@@ -59,7 +59,10 @@ class Telemetry(BaseModel):
     status: RobotStatus
     motors: list[MotorState]
     fingers: list[FingerState]
-    gravity: dict[str, float] = {}   # per-arm-joint gravity load torque (N*m)
+    # Per-arm-joint gravity load torque (N*m). None means NOT KNOWN -- the joint
+    # has no measured model and the URDF's placeholder masses are not a usable
+    # substitute. Consumers must render/skip None rather than treat it as zero.
+    gravity: dict[str, Optional[float]] = {}
     # tendon model output: {"fingers": {finger: {joint: deg}}, "theta": {...},
     # "offsets": {...}} — see hand_kinematics.py
     hand_joints: dict = {}

@@ -48,12 +48,34 @@ const HAND_JOINTS = {
 // Baked-in mounting correction (URDF axis/zero vs the physical robot). ALWAYS
 // applied — the user never has to toggle these.
 const BASE_OFFSET_DEG = { shoulder_pitch: 0 }
-// elbow_flex: the URDF turns the elbow the wrong way round. Verified against the
-// encoder reference the joint was built to (raw 2047 = 90 deg between upper arm
-// and forearm): normalized -88 is a nearly straight arm, which the unpatched
-// URDF drew as fully folded. Keep this Set identical to BASE_INVERT in
-// backend/app/kinematics.py.
-const BASE_INVERT = new Set(['shoulder_pitch', 'shoulder_yaw', 'shoulder_roll', 'elbow_flex'])
+
+// --- pose mapping -------------------------------------------------------------
+// The joints were physically built to a single reference: raw encoder 2047 is
+// the neutral configuration of every one of them (shoulder pitch/roll centred,
+// shoulder yaw straight, elbow at 90 deg, wrist roll palm-forward, wrist
+// yaw/pitch centred), and that lands on the URDF's own joint zero. So the pose
+// is anchored there and stepped out in encoder counts:
+//
+//     angle = (raw - 2047) * 2*pi/4096 * dir
+//
+// rather than stretching normalized -100..100 across the URDF's joint limits.
+// Two reasons the old way drifted:
+//   * the URDF limit span is not the servo's calibrated span (the elbow's are
+//     136.7 vs 131.8 deg), so the scale was off;
+//   * normalized 0 is the middle of the calibrated window, which is NOT raw
+//     2047 — for the elbow the reference sits at normalized +29, for wrist
+//     pitch at -29 — so the zero was off as well.
+// Encoder counts have neither problem, and a re-calibration moves the window
+// without moving the pose. Matches backend/app/kinematics.py, which anchors the
+// measured gravity model the same way.
+const REF_RAW = 2047
+const COUNTS_PER_REV = 4096
+// Direction of the URDF joint angle against increasing encoder count. This
+// replaces the old BASE_INVERT set: -1 here is exactly what "inverted" meant.
+const BASE_DIR = {
+  shoulder_pitch: -1, shoulder_yaw: -1, shoulder_roll: -1, elbow_flex: -1,
+  wrist_roll: 1, wrist_yaw: 1, wrist_pitch: 1,
+}
 
 // User fine-tuning on TOP of the base correction (panel), starts clean.
 const DEFAULT_TUNING = Object.fromEntries(ARM.map(m => [m, { off: 0, inv: false }]))
@@ -83,6 +105,7 @@ export default function RobotViewer({ snapRef }) {
   const [grav, setGrav] = useState({})
   const [cur, setCur] = useState({})
   const [masses, setMasses] = useState({})   // {armLinkName: mass}
+  const calRef = useRef({})                  // {motor: {min, max}} servo windows
   const [simMode, setSimMode] = useState(false)   // drive URDF from sliders, no robot
   const [simVals, setSimVals] = useState(() => Object.fromEntries(ARM.map(m => [m, 0])))
   const simModeRef = useRef(false)
@@ -193,6 +216,17 @@ export default function RobotViewer({ snapRef }) {
       if (Object.keys(armLinks).length) setMasses(armLinks)
     }
     fetch('/api/links').then(r => r.json()).then(d => { linksRef.current = d.links || {}; buildDownstream() }).catch(() => {})
+    // Servo windows, so a normalized position can be put back into raw counts.
+    // Until this lands the mapping falls back to the URDF limits below.
+    fetch('/api/calibration/status').then(r => r.json()).then(d => {
+      const c = {}
+      for (const m of (d.motors || [])) {
+        if (m.unit === 'arm' && m.cur_min != null && m.cur_max != null && m.cur_max > m.cur_min) {
+          c[m.name] = { min: m.cur_min, max: m.cur_max }
+        }
+      }
+      calRef.current = c
+    }).catch(() => {})
 
     loader.load(URDF, (robot) => {
       robotRef.current = robot
@@ -223,12 +257,21 @@ export default function RobotViewer({ snapRef }) {
         for (const [motor, joint] of Object.entries(jointMapRef.current)) {
           const j = robot.joints[joint]; let v = pos[motor]; const t = tune[motor] || {}
           if (j && v != null && j.limit) {
-            // effective invert = baked-in XOR user; effective offset = base + user
-            if (BASE_INVERT.has(motor) !== !!t.inv) v = -v
             const off = ((BASE_OFFSET_DEG[motor] || 0) + (t.off || 0)) * DEG
             const lo = Number(j.limit.lower), hi = Number(j.limit.upper)
-            if (isFinite(lo) && isFinite(hi) && hi > lo) {
-              const angle = lo + ((clamp(v, -100, 100) + 100) / 200) * (hi - lo) + off
+            const cal = calRef.current[motor]
+            let angle = null
+            if (cal) {
+              // anchored at raw 2047, stepped in encoder counts (see BASE_DIR)
+              const raw = cal.min + ((clamp(v, -100, 100) + 100) / 200) * (cal.max - cal.min)
+              const dir = (BASE_DIR[motor] ?? 1) * (t.inv ? -1 : 1)
+              angle = (raw - REF_RAW) * (2 * Math.PI / COUNTS_PER_REV) * dir + off
+            } else if (isFinite(lo) && isFinite(hi) && hi > lo) {
+              // no calibration yet: the old limit-stretch, so the arm still draws
+              if (((BASE_DIR[motor] ?? 1) < 0) !== !!t.inv) v = -v
+              angle = lo + ((clamp(v, -100, 100) + 100) / 200) * (hi - lo) + off
+            }
+            if (angle != null) {
               robot.setJointValue(joint, angle)
               anglesRef.current[motor] = angle / DEG
             }
@@ -399,7 +442,9 @@ export default function RobotViewer({ snapRef }) {
             ))}
           </div>
           <div className="help" style={{ marginTop: 6, fontSize: 10 }}>
-            τg = gravity torque each joint holds at the current pose (from URDF link masses). Edit masses in Configuration.
+            τg = gravity torque each joint holds at the current pose, from the measured model in
+            backend/identification/gravity_model.json. A dash means that joint has not been identified —
+            its range of travel is too small to separate gravity from friction — not that the torque is zero.
           </div>
           <button onClick={() => setTuning(structuredClone(DEFAULT_TUNING))}
             style={{ ...box, marginTop: 8, padding: '4px 8px', cursor: 'pointer', position: 'static', color: '#e6edf3' }}>

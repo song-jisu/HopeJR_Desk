@@ -200,15 +200,25 @@ class RobotManager:
         angular scale (see kinematics.set_calibration). Refreshed on the same
         ~1 Hz tick as the link cache, since a re-calibration changes it."""
         from .kinematics import get_kinematics
+        from .kinematics import set_gravity_calibration
+        cal = self._calibration_snapshot()
         kin = get_kinematics()
         if kin is not None:
-            kin.set_calibration(self._calibration_snapshot())
+            kin.set_calibration(cal)
+        # the measured gravity model is anchored to raw counts, so it needs the
+        # same live ranges to put a normalized position back into raw
+        set_gravity_calibration(cal)
         return kin
 
     def _gravity_torque(self, motors: list[MotorState], now: float) -> dict:
-        """Per-arm-joint gravity load torque from live pose + link masses.
-        Masses are cached and refreshed ~1 Hz (link_params.json is tiny but the
-        URDF parse behind get_links() is not worth doing at telemetry rate)."""
+        """Per-arm-joint gravity load torque at the live pose, or None per joint
+        where it is not known.
+
+        Goes through kinematics.gravity_torque(), the module-level function --
+        NOT ArmKinematics.gravity_torque(), which is the URDF-only half. Calling
+        the method directly is what silently kept the measured model off this
+        path while every direct test of it passed.
+        """
         try:
             from . import kinematics
             if now - self._links_cache_t > 1.0 or not self._links_cache:
@@ -216,11 +226,8 @@ class RobotManager:
                 self._links_cache = linklib.get_links()
                 self._links_cache_t = now
                 self._arm_kin_calibrated()   # refresh the angular scale too
-            kin = kinematics.get_kinematics()
-            if kin is None:
-                return {}
             positions = {m.name: m.position for m in motors if m.unit == "arm"}
-            return kin.gravity_torque(positions, self._links_cache)
+            return kinematics.gravity_torque(positions)
         except Exception as e:
             self.log("error", f"gravity torque: {e}")
             return {}

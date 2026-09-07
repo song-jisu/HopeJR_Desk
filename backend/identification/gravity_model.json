@@ -1,0 +1,157 @@
+{
+  "_note": "Per-joint gravity, anchored to RAW encoder counts so a re-calibration cannot silently invalidate it. tau_g = A*cos(th) + B*sin(th), th = (raw - 2047) * 2*pi/4096 radians. raw 2047 is the reference the joints were physically set up to.",
+  "_ref_raw": 2047.0,
+  "_counts_per_rev": 4096.0,
+  "_k_tau_N_m_per_count": {
+    "sm8512bl": 0.02398,
+    "sts3250": 0.00917
+  },
+  "_motor_model": {
+    "shoulder_pitch": "sm8512bl"
+  },
+  "joints": {
+    "shoulder_pitch": {
+      "A": 0.4213,
+      "B": -4.4592,
+      "friction_N_m": 1.2806,
+      "cond": 1.05,
+      "resid_N_m": 0.1761,
+      "span_N_m": 9.089,
+      "arc_deg": 166.2,
+      "bins": 35,
+      "background_raw": {
+        "shoulder_pitch": 2051,
+        "shoulder_yaw": 1300,
+        "shoulder_roll": 1345,
+        "elbow_flex": 1168,
+        "wrist_roll": 510,
+        "wrist_yaw": 2065,
+        "wrist_pitch": 2298
+      },
+      "source": "shoulder_pitch_ktauA90",
+      "elbow_dependence": {
+        "A0": 1.2201,
+        "dA_draw": 0.00089985,
+        "B0": -3.3117,
+        "dB_draw": 0.00133475,
+        "fitted_at_elbow_raw": [
+          1168,
+          1822,
+          1485
+        ],
+        "note": "A,B linear in (elbow raw - 2047). Held-out test at elbow raw ~1717 gave 3.0% vs a 2.9% self-fit floor."
+      }
+    },
+    "elbow_flex": {
+      "A": -1.756,
+      "B": -0.5481,
+      "friction_N_m": 0.941,
+      "cond": 1.57,
+      "resid_N_m": 0.0807,
+      "span_N_m": 2.182,
+      "arc_deg": 115.4,
+      "bins": 36,
+      "background_raw": {
+        "shoulder_pitch": 2114,
+        "shoulder_yaw": 1300,
+        "shoulder_roll": 1345,
+        "elbow_flex": 1786,
+        "wrist_roll": 510,
+        "wrist_yaw": 2066,
+        "wrist_pitch": 2297
+      },
+      "source": "elbow_base_newpose"
+    },
+    "wrist_pitch": {
+      "A": 0.1652,
+      "B": -0.482,
+      "friction_N_m": 0.1769,
+      "cond": 2.38,
+      "resid_N_m": 0.0283,
+      "span_N_m": 0.74,
+      "arc_deg": 78.9,
+      "bins": 38,
+      "background_raw": {
+        "shoulder_pitch": 2110,
+        "shoulder_yaw": 1300,
+        "shoulder_roll": 1344,
+        "elbow_flex": 1131,
+        "wrist_roll": 650,
+        "wrist_yaw": 2109,
+        "wrist_pitch": 2186
+      },
+      "source": "wrist_pitch_none"
+    },
+    "shoulder_roll": {
+      "A": 0.0466,
+      "B": 0.0505,
+      "friction_N_m": 0.2805,
+      "cond": 1.64,
+      "resid_N_m": 0.0395,
+      "span_N_m": 0.214,
+      "arc_deg": 111.2,
+      "bins": 37,
+      "background_raw": {
+        "shoulder_pitch": 2115,
+        "shoulder_yaw": 1301,
+        "shoulder_roll": 2046,
+        "elbow_flex": 1339,
+        "wrist_roll": 582,
+        "wrist_yaw": 1902,
+        "wrist_pitch": 2024
+      },
+      "source": "shoulder_roll_probe90"
+    },
+    "wrist_roll": {
+      "A": -0.009,
+      "B": -0.0259,
+      "friction_N_m": 0.1171,
+      "cond": 1.24,
+      "resid_N_m": 0.0258,
+      "span_N_m": 0.131,
+      "arc_deg": 241.3,
+      "bins": 39,
+      "background_raw": {
+        "shoulder_pitch": 2110,
+        "shoulder_yaw": 1300,
+        "shoulder_roll": 1344,
+        "elbow_flex": 1132,
+        "wrist_roll": 1958,
+        "wrist_yaw": 1858,
+        "wrist_pitch": 1728
+      },
+      "source": "wrist_roll_none"
+    }
+  },
+  "_fitted_calibration": {
+    "shoulder_pitch": {
+      "range_min": 940,
+      "range_max": 3165
+    },
+    "shoulder_yaw": {
+      "range_min": 1300,
+      "range_max": 2410
+    },
+    "shoulder_roll": {
+      "range_min": 1344,
+      "range_max": 2750
+    },
+    "elbow_flex": {
+      "range_min": 1080,
+      "range_max": 2580
+    },
+    "wrist_roll": {
+      "range_min": 510,
+      "range_max": 3400
+    },
+    "wrist_yaw": {
+      "range_min": 1840,
+      "range_max": 2250
+    },
+    "wrist_pitch": {
+      "range_min": 1700,
+      "range_max": 2670
+    }
+  },
+  "_fitted_calibration_note": "The servo windows in force when these coefficients were fitted. Used to resolve normalized->raw when no live calibration has been supplied (mock backend, offline analysis). The live one takes precedence, which is what makes a re-calibration transparent."
+}

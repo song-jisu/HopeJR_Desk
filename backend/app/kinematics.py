@@ -19,6 +19,7 @@ Y-up gravity vector here.)
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import xml.etree.ElementTree as ET
@@ -248,6 +249,116 @@ class ArmKinematics:
 _KIN: ArmKinematics | None = None
 
 
+# --- measured gravity model ---------------------------------------------------
+# Identified from bidirectional sweeps (backend/identification/). Preferred over
+# the URDF path below because the URDF's inertial block is placeholders: four of
+# its links carry a flat 3.0 kg and their CoM directions are wrong too, which is
+# why fitting real masses to them returns negative values. What the measurement
+# gives instead is, per joint, the gravity torque as a function of that joint's
+# own position -- exactly the quantity gravity compensation needs.
+#
+# LIMIT: each curve was measured with the other joints parked. shoulder_pitch
+# also carries an elbow-dependence term, validated against a held-out elbow pose
+# (3.0% against a 2.9% self-fit floor). No other cross-joint dependence has been
+# measured, so a joint that moves far from its recorded background pose is
+# extrapolation. The recorded background is kept alongside each entry.
+_MODEL_FILE = os.environ.get(
+    "HOPEJR_GRAVITY_MODEL",
+    os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                 "identification", "gravity_model.json"))
+_MODEL: dict | None = None
+
+
+_MODEL_META: dict | None = None
+
+
+def _load_model() -> None:
+    global _MODEL, _MODEL_META
+    try:
+        with open(_MODEL_FILE) as f:
+            doc = json.load(f)
+        _MODEL = doc.get("joints", {}) or {}
+        _MODEL_META = {k: v for k, v in doc.items() if k.startswith("_")}
+    except Exception:
+        _MODEL, _MODEL_META = {}, {}
+
+
+def get_gravity_model() -> dict:
+    """{joint: coefficients} from the identification run, or {} if absent."""
+    if _MODEL is None:
+        _load_model()
+    return _MODEL
+
+
+def get_gravity_meta() -> dict:
+    """The model's own constants (_ref_raw, _counts_per_rev, k_tau, ...)."""
+    if _MODEL_META is None:
+        _load_model()
+    return _MODEL_META or {}
+
+
+_GRAVITY_CAL: dict[str, dict] = {}
+
+
+def set_gravity_calibration(cal: dict) -> None:
+    """Live servo ranges, so a normalized position can be put back into raw
+    encoder counts -- the coordinate the model is anchored in."""
+    global _GRAVITY_CAL
+    _GRAVITY_CAL = cal or {}
+
+
+def _to_raw(motor: str, q: float) -> float | None:
+    """Normalized -100..100 -> raw encoder count, under the LIVE calibration.
+
+    This is what makes the model survive a re-calibration. The coefficients are
+    stored against raw counts, and raw is a physical fact about where the joint
+    is; normalized is a percentage of a window whose ends the user can move. Go
+    through raw and a re-calibrated window maps the same pose to the same angle
+    and so the same torque, with nothing to re-identify.
+    """
+    c = _GRAVITY_CAL.get(motor) or {}
+    if not c:
+        # No live calibration (mock backend, offline analysis). Fall back to the
+        # window the coefficients were fitted under, which the model carries --
+        # exact for anything running the same nominal ranges, and better than
+        # reporting nothing at all.
+        c = (get_gravity_meta().get("_fitted_calibration") or {}).get(motor) or {}
+    lo, hi = c.get("range_min"), c.get("range_max")
+    if lo is None or hi is None or hi <= lo:
+        return None
+    return lo + (max(-100.0, min(100.0, q)) + 100.0) / 200.0 * (hi - lo)
+
+
+def measured_gravity_torque(positions: dict[str, float]) -> dict[str, float]:
+    """Per-joint gravity torque (N*m) from the measured model. Only joints the
+    model covers AND whose raw position is resolvable appear; the caller falls
+    back for the rest."""
+    model = get_gravity_model()
+    if not model:
+        return {}
+    ref = float(get_gravity_meta().get("_ref_raw", 2047.0))
+    cpr = float(get_gravity_meta().get("_counts_per_rev", 4096.0))
+    out: dict[str, float] = {}
+    for motor, e in model.items():
+        q = positions.get(motor)
+        if q is None:
+            continue
+        raw = _to_raw(motor, q)
+        if raw is None:
+            continue
+        a, b = e["A"], e["B"]
+        dep = e.get("elbow_dependence")
+        if dep is not None:
+            raw_e = _to_raw("elbow_flex", positions.get("elbow_flex", 0.0)) \
+                if "elbow_flex" in positions else None
+            if raw_e is not None:
+                a = dep["A0"] + dep["dA_draw"] * (raw_e - ref)
+                b = dep["B0"] + dep["dB_draw"] * (raw_e - ref)
+        th = (raw - ref) * 2.0 * math.pi / cpr
+        out[motor] = round(a * math.cos(th) + b * math.sin(th), 4)
+    return out
+
+
 def get_kinematics() -> ArmKinematics | None:
     global _KIN
     if _KIN is None:
@@ -258,9 +369,27 @@ def get_kinematics() -> ArmKinematics | None:
     return _KIN
 
 
-def gravity_torque(positions: dict[str, float]) -> dict[str, float]:
-    """Convenience: gravity torque using the live link masses from links.py."""
+def gravity_torque(positions: dict[str, float]) -> dict[str, float | None]:
+    """Per-joint gravity torque in N*m, or None where it is not known.
+
+    Once a measured model exists, a joint the model does NOT cover reports None
+    rather than the URDF's answer. The URDF's inertial block is placeholders --
+    four links at a flat 3.0 kg with CoM directions that fitting rejects as
+    negative mass -- so its number for an unmeasured joint was not a rough
+    estimate, it was wrong by an order of magnitude: shoulder_yaw read 17 N*m at
+    rest, larger than the entire measured span of the joint that carries the
+    whole arm. A caller cannot tell a bad number from a good one, but it can
+    handle None.
+
+    With no model file at all (a fresh checkout), the URDF path is still used
+    for everything, so nothing that relied on it silently goes blank.
+    """
+    measured = measured_gravity_torque(positions)
     kin = get_kinematics()
-    if kin is None:
-        return {}
-    return kin.gravity_torque(positions, linklib.get_links())
+    urdf = kin.gravity_torque(positions, linklib.get_links()) if kin else {}
+    if not measured:
+        return dict(urdf)
+    out: dict[str, float | None] = {m: None for m in ARM_MOTORS}
+    out.update({k: v for k, v in urdf.items() if k not in out})
+    out.update(measured)
+    return out
