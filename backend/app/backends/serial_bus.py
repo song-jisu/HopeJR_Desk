@@ -33,6 +33,24 @@ from ..models import MotorState, RobotStatus
 ARM_ORDER = [m.name for m in ARM_MOTORS]
 HAND_ORDER = [m.name for m in HAND_MOTORS]
 
+# Serialises EVERY serial transaction on EVERY bus in this process.
+#
+# Module-global, not per-bus, because the thing it protects is module-global: the
+# Feetech SDK keeps endianness in scservo_def.SCS_END, which _select() re-asserts
+# before each operation. Two buses of different protocols (arm proto 0, hand
+# proto 1) therefore fight over one variable, so a per-bus lock leaves the arm
+# and hand free to flip it under each other -- a concurrency test caught exactly
+# that after the first attempt at this fix.
+#
+# Two threads contend: the worker loop, and any HTTP handler reading diagnostics
+# (raw_report, calibration_status). The symptom without it is a read that comes
+# back 0 or None for every motor while the bus is otherwise healthy, which is
+# indistinguishable from a real reading unless you already suspect it -- and it
+# is the reading someone would use to set a calibration offset.
+#
+# RLock: read_profile() calls read_all().
+_BUS_IO_LOCK = threading.RLock()
+
 # Two different readings stand in for joint torque, and they are not the same
 # quantity — both are recorded because each answers something the other cannot.
 #
@@ -134,6 +152,7 @@ class _Bus:
         self.drive_modes = dict(drive_modes or {})
         calibration = None if from_motors else _load_calibration(calib_path)
         self.calibrated_from_file = calibration is not None
+        self._io = _BUS_IO_LOCK
         self.bus = FeetechMotorsBus(port=port, motors=motors,
                                     protocol_version=proto, calibration=calibration)
         try:
@@ -179,16 +198,17 @@ class _Bus:
         endianness must be asserted first (see _select). It always returns
         drive_mode=0, so any direction flip is re-applied from self.drive_modes."""
         import dataclasses
-        self._select()
-        try:
-            cal = self.bus.read_calibration()
-        except Exception:
-            return False
-        for n, dm in self.drive_modes.items():
-            if n in cal and dm:
-                cal[n] = dataclasses.replace(cal[n], drive_mode=int(dm))
-        self.bus.calibration = cal
-        return True
+        with self._io:
+            self._select()
+            try:
+                cal = self.bus.read_calibration()
+            except Exception:
+                return False
+            for n, dm in self.drive_modes.items():
+                if n in cal and dm:
+                    cal[n] = dataclasses.replace(cal[n], drive_mode=int(dm))
+            self.bus.calibration = cal
+            return True
 
     def write_ranges_to_motors(self, ranges: dict) -> int:
         """Persist {motor: (min, max)} into the servos' Min/Max_Position_Limit.
@@ -196,26 +216,29 @@ class _Bus:
         Deliberately does NOT touch Homing_Offset (lerobot's write_calibration()
         does, and re-writing it corrupts the hardware offset and saturates the
         arm). Torque must be off so the EEPROM lock is released."""
-        self._select()
-        n = 0
-        for name, (mn, mx) in ranges.items():
-            if name not in self.order or mx <= mn:
-                continue
-            self.bus.write("Min_Position_Limit", name, int(mn), normalize=False)
-            self.bus.write("Max_Position_Limit", name, int(mx), normalize=False)
-            n += 1
-        return n
+        with self._io:
+            self._select()
+            n = 0
+            for name, (mn, mx) in ranges.items():
+                if name not in self.order or mx <= mn:
+                    continue
+                self.bus.write("Min_Position_Limit", name, int(mn), normalize=False)
+                self.bus.write("Max_Position_Limit", name, int(mx), normalize=False)
+                n += 1
+            return n
 
     def enable(self):
-        self._select()
-        self.bus.enable_torque()
+        with self._io:
+            self._select()
+            self.bus.enable_torque()
 
     def disable(self):
-        self._select()
-        try:
-            self.bus.disable_torque()
-        except Exception:
-            pass
+        with self._io:
+            self._select()
+            try:
+                self.bus.disable_torque()
+            except Exception:
+                pass
 
     # Onboard motion profile. Both control tables carry these at the same
     # addresses — STS/SMS for the arm, SCS for the hand:
@@ -229,7 +252,8 @@ class _Bus:
     def read_profile(self) -> dict:
         """Current {reg: {motor: value}}. Logged before we overwrite, so what
         the servos were actually set to is visible rather than assumed."""
-        return {r: self.read_all(r, normalize=False) for r in self.PROFILE_REGS}
+        with self._io:
+            return {r: self.read_all(r, normalize=False) for r in self.PROFILE_REGS}
 
     def write_profile(self, accel: int, speed: int) -> dict:
         """Install the onboard profile on every motor of this bus.
@@ -237,6 +261,10 @@ class _Bus:
         Both are SRAM registers, so they reset when a servo loses power — this
         runs on each torque enable rather than once at startup. A value <= 0
         leaves that register alone. Returns {reg: motors_written}."""
+        with self._io:
+            return self._write_profile(accel, speed)
+
+    def _write_profile(self, accel: int, speed: int) -> dict:
         self._select()
         wrote: dict[str, int] = {}
         for reg, val in (("Acceleration", accel), ("Goal_Velocity", speed)):
@@ -260,38 +288,42 @@ class _Bus:
 
     def write_goals(self, goals: dict):
         # sync_write works on both protocols (proto 1 hand included).
-        self._select()
-        self.bus.sync_write("Goal_Position", goals)
+        with self._io:
+            self._select()
+            self.bus.sync_write("Goal_Position", goals)
 
     def write_raw(self, data_name: str, values: dict):
-        self._select()
-        self.bus.sync_write(data_name, values, normalize=False)
+        with self._io:
+            self._select()
+            self.bus.sync_write(data_name, values, normalize=False)
 
     def read_some(self, data_name, names, normalize) -> dict:
         """Read a SUBSET of this bus's motors. Protocol 1 has no sync read, so
         splitting a pass across cycles is the only way to keep the loop fast."""
-        self._select()
-        out = {}
-        for name in names:
-            try:
-                out[name] = self.bus.read(data_name, name, normalize=normalize)
-            except Exception:
-                pass
-        return out
+        with self._io:
+            self._select()
+            out = {}
+            for name in names:
+                try:
+                    out[name] = self.bus.read(data_name, name, normalize=normalize)
+                except Exception:
+                    pass
+            return out
 
     def read_all(self, data_name, normalize) -> dict:
         # Protocol 1 (scs0009 hand) has no Sync Read — read each motor
         # sequentially. Protocol 0 (arm) uses the fast sync_read.
-        self._select()
-        if self.proto == 0:
-            return self.bus.sync_read(data_name, normalize=normalize)
-        out = {}
-        for name in self.order:
-            try:
-                out[name] = self.bus.read(data_name, name, normalize=normalize)
-            except Exception:
-                pass
-        return out
+        with self._io:
+            self._select()
+            if self.proto == 0:
+                return self.bus.sync_read(data_name, normalize=normalize)
+            out = {}
+            for name in self.order:
+                try:
+                    out[name] = self.bus.read(data_name, name, normalize=normalize)
+                except Exception:
+                    pass
+            return out
 
 
 class SerialBackend:
